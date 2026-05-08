@@ -5,7 +5,8 @@ from datetime import datetime
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="NewsBot Control Panel", layout="wide")
-
+# En dashboard.py
+with psycopg2.connect(DB_URL, gssencmode='disable') as conn:
 # --- CONEXIÓN A SUPABASE (POSTGRESQL) ---
 DB_URL = "postgresql://postgres:[Jlbr992$Supabase]@db.xzxivxhxzgurxobgrnoo.supabase.co:5432/postgres"
 

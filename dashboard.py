@@ -24,7 +24,7 @@ def run_query(query, params=None, is_select=True):
             conn.commit()
 
 # --- INTERFAZ ---
-st.title("🤖 Monitor ODC - NewsBot Manager")
+st.title("🤖 NewsBot Manager")
 st.markdown("Gestión de noticias, anuncios y sincronización con GitHub.")
 
 tabs = st.tabs(["📈 Estadísticas", "📢 Gestionar Anuncios", "📰 Historial News", "⚙️ Configuración"])

@@ -8,7 +8,7 @@ st.set_page_config(page_title="NewsBot Control Panel", layout="wide")
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Se recomienda usar el puerto 6543 (Transaction Pooler) para estabilidad en la nube
-DB_URL = "postgresql://postgres:[Jlbr992$Supabase]@db.xzxivxhxzgurxobgrnoo.supabase.co:6543/postgres"
+DB_URL = "postgresql://postgres:[Jlbr992$Supabase]@db.xzxivxhxzgurxobgrnoo.supabase.co:5432/postgres"
 
 def run_query(query, params=None, is_select=True):
     # Añadimos gssencmode='disable' para evitar errores de red en Streamlit Cloud

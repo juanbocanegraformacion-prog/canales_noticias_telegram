@@ -1,3 +1,7 @@
+feedparser
 psycopg2-binary
+python-telegram-bot
 streamlit
+beautifulsoup4
+requests
 pandas

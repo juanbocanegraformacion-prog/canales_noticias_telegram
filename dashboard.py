@@ -8,7 +8,7 @@ st.set_page_config(page_title="NewsBot Control Panel", layout="wide")
 
 # --- CONFIGURACIÓN DE CONEXIÓN ---
 # Se recomienda usar el puerto 6543 (Transaction Pooler) para estabilidad en la nube
-DB_URL = "postgresql://postgres:Jlbr992$Supabase@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
+DB_URL = "postgresql://postgres:[Jlbr992$Supabase]@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
           
 
 def run_query(query, params=None, is_select=True):

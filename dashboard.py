@@ -10,8 +10,7 @@ st.set_page_config(page_title="NewsBot Control Panel", layout="wide")
 
 # Reemplazas el $ por %24
 #DB_URL = "postgresql://postgres:Jlbr992%24Supabase@db.xzxivxhxzgurxobgrnoo.supabase.co:5432/postgres"
-
-DB_URL = "postgresql://postgres:Jlbr992$Supabase@db.xzxivxhxzgurxobgrnoo.supabase.co:5432/postgres?hostaddr=172.16.30.10"
+DB_URL = "postgresql://postgres:Jlbr992$Supabase@db.xzxivxhxzgurxobgrnoo.supabase.co:5432/postgres"
           
 
 def run_query(query, params=None, is_select=True):

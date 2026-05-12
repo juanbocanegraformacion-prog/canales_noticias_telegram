@@ -6,4 +6,4 @@ beautifulsoup4
 requests
 pandas
 supabase
-supabase-py
+

@@ -1,23 +1,10 @@
-name: NewsBot_RPA
-
-on:
-  schedule:
-    #- cron: '0 * * * *'
-  workflow_dispatch:
-
-jobs:
-  run-bot:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      - name: Instalación
-        run: pip install feedparser psycopg2-binary requests beautifulsoup4 python-telegram-bot
-      - name: Ejecución
+- name: Ejecutar Bot Multicanal
         env:
           DB_URL: ${{ secrets.DB_URL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-        run: python bot_news.py
+          CH_DEPORTES: ${{ secrets.CH_DEPORTES }}
+          CH_ENTRETENIMIENTO: ${{ secrets.CH_ENTRETENIMIENTO }}
+          CH_MUNDO: ${{ secrets.CH_MUNDO }}
+          CH_FINANZAS: ${{ secrets.CH_FINANZAS }}
+          CH_FITNESS: ${{ secrets.CH_FITNESS }}
+        run: python bot_multicanal.py

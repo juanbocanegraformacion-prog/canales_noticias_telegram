@@ -8,10 +8,10 @@ import os
 st.set_page_config(page_title="NewsBot Control Panel", layout="wide")
 
 # Credenciales (usa secrets en producción, aquí con fallback local)
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://vjtqhjykwqutxvrufgpv.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://xzxivxhxzgurxobgrnoo.supabase.co")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv(
     "SUPABASE_SERVICE_ROLE_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqdHFoanlrd3F1dHh2cnVmZ3B2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODUyNDkwMCwiZXhwIjoyMDk0MTAwOTAwfQ.jhxHBIBE2liTHdD8WV2CyYSF9xx9Wxfl8HwJ4sXnhbo"
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh6eGl2eGh4emd1cnhvYmdybm9vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODI1MjkxOCwiZXhwIjoyMDkzODI4OTE4fQ.bSz4_qokDcIDRF7RXyJzExIW42wiClftri9-mGeg_U4"
 )
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 

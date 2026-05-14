@@ -1,5 +1,31 @@
-- name: Ejecutar Bot Multicanal
- env:
+name: NewsBot_RPA_Multichannel
+
+on:
+  schedule:
+    # Se ejecuta cada hora (minuto 0)
+    - cron: '0 * * * *'
+  # Habilita la ejecución manual desde la interfaz de GitHub
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Instalar dependencias
+        run: |
+          pip install feedparser psycopg2-binary requests beautifulsoup4 python-telegram-bot
+
+      - name: Ejecutar Bot Multicanal
+        env:
+          # Inyección de secretos de GitHub a variables de entorno
           DB_URL: ${{ secrets.DB_URL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CH_DEPORTES: ${{ secrets.CH_DEPORTES }}
@@ -7,5 +33,5 @@
           CH_MUNDO: ${{ secrets.CH_MUNDO }}
           CH_FINANZAS: ${{ secrets.CH_FINANZAS }}
           CH_FITNESS: ${{ secrets.CH_FITNESS }}
-          CH_TECNOLOGIA: ${{ secrets.CH_TECNOLOGIA }} # <-- Agregar esta línea
+          CH_TECNOLOGIA: ${{ secrets.CH_TECNOLOGIA }}
         run: python bot_multicanal.py

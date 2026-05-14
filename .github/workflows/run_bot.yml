@@ -10,23 +10,31 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Optar por Node 24 ahora para evitar las advertencias de deprecación
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      
     steps:
       - name: Checkout del código
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Actualizado de v3 a v4
 
       - name: Configurar Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # Actualizado de v4 a v5
         with:
           python-version: '3.10'
+          cache: 'pip' # Mantiene la instalación de dependencias rápida
 
       - name: Instalar dependencias
         run: |
-          pip install feedparser psycopg2-binary requests beautifulsoup4 python-telegram-bot
+          pip install feedparser requests beautifulsoup4 python-telegram-bot supabase
 
       - name: Ejecutar Bot Multicanal
         env:
-          # Inyección de secretos de GitHub a variables de entorno
-          DB_URL: ${{ secrets.DB_URL }}
+          # Conexión Supabase (Nuevos Secrets)
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          
+          # Telegram y Canales
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CH_DEPORTES: ${{ secrets.CH_DEPORTES }}
           CH_ENTRETENIMIENTO: ${{ secrets.CH_ENTRETENIMIENTO }}

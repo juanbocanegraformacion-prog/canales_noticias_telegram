@@ -1,5 +1,5 @@
 - name: Ejecutar Bot Multicanal
-        env:
+ env:
           DB_URL: ${{ secrets.DB_URL }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CH_DEPORTES: ${{ secrets.CH_DEPORTES }}
@@ -7,4 +7,5 @@
           CH_MUNDO: ${{ secrets.CH_MUNDO }}
           CH_FINANZAS: ${{ secrets.CH_FINANZAS }}
           CH_FITNESS: ${{ secrets.CH_FITNESS }}
+          CH_TECNOLOGIA: ${{ secrets.CH_TECNOLOGIA }} # <-- Agregar esta línea
         run: python bot_multicanal.py

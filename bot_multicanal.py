@@ -5,9 +5,9 @@ import requests
 from bs4 import BeautifulSoup
 from telegram import Bot
 import asyncio
+import random
 
 # --- CONFIGURACIÓN DE CANALES ---
-# Mapeo de Categoría -> [URL del RSS, ID del Canal (Secret)]
 CANALES_CONFIG = {
     "Deportes": ["https://news.google.com/rss/headlines/section/topic/SPORTS?hl=es-419", os.getenv("CH_DEPORTES")],
     "Farándula": ["https://news.google.com/rss/search?q=farandula+ENTERTAINMENT&hl=es-419", os.getenv("CH_ENTRETENIMIENTO")],
@@ -20,75 +20,94 @@ CANALES_CONFIG = {
 DB_URL = os.getenv("DB_URL")
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
+# --- LISTA DE GANCHOS (HOOKS) PARA CLICKS ---
+GANCHOS = [
+    "¡Entérate de todos los detalles aquí! 👇",
+    "No vas a creer lo que pasó. Mira la nota completa: 🚀",
+    "Lee la noticia completa en nuestro portal: 📍",
+    "¿Quieres saber más? Haz clic abajo: 🔥",
+    "Toda la información disponible aquí: 👇",
+    "Actualización de último minuto: ⏱️"
+]
+
 def extraer_imagen(url):
-    """Realiza scraping básico para obtener la imagen destacada (OpenGraph)."""
     try:
         res = requests.get(url, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
         img = soup.find("meta", property="og:image")
         return img["content"] if img else None
-    except Exception:
-        return None
+    except: return None
+
+def guardar_noticia_y_contar(url_hash, categoria):
+    """Guarda la noticia y retorna el nuevo conteo total para decidir si poner anuncio."""
+    with psycopg2.connect(DB_URL) as conn:
+        with conn.cursor() as cur:
+            # Registrar noticia
+            cur.execute("INSERT INTO noticias_publicadas (noticia_hash, categoria) VALUES (%s, %s)", (url_hash, categoria))
+            # Actualizar y obtener contador global
+            cur.execute("UPDATE contador_publicaciones SET total_enviadas = total_enviadas + 1 WHERE id = 1 RETURNING total_enviadas")
+            return cur.fetchone()[0]
+
+async def publicar_anuncio(channel_id):
+    """Selecciona un anuncio activo al azar y lo publica en el canal actual."""
+    try:
+        with psycopg2.connect(DB_URL) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT texto_anuncio, imagen_url, link_afiliado FROM anuncios_disponibles WHERE activo = TRUE")
+                ads = cur.fetchall()
+                if ads:
+                    ad = random.choice(ads)
+                    bot = Bot(token=TOKEN)
+                    txt = f"<b>📢 PUBLICIDAD</b>\n\n{ad[0]}\n\n👉 <a href='{ad[2]}'>MÁS INFORMACIÓN AQUÍ</a>"
+                    await bot.send_photo(chat_id=channel_id, photo=ad[1], caption=txt, parse_mode='HTML')
+                    print(f"💰 Anuncio publicado en el canal {channel_id}")
+    except Exception as e:
+        print(f"❌ Error al publicar anuncio: {e}")
 
 async def procesar_canal(categoria, url_rss, channel_id):
-    """Procesa las noticias de un canal específico."""
-    if not channel_id:
-        print(f"⚠️ Error: No se encontró el ID para {categoria}. Revisa tus Secrets.")
-        return
+    if not channel_id: return
 
     bot = Bot(token=TOKEN)
     feed = feedparser.parse(url_rss)
     
-    print(f"--- Iniciando scraping de: {categoria} ---")
-    
-    # Conexión a la base de datos Supabase
     try:
         with psycopg2.connect(DB_URL) as conn:
             with conn.cursor() as cur:
-                # Tomamos las últimas 3 noticias de cada feed para evitar saturar
+                # Procesar noticias (máximo 3 por ejecución)
                 for entry in feed.entries[:3]:
-                    # 1. Verificar si la noticia ya fue publicada
+                    # 1. Evitar duplicados (Verificamos noticia_hash)
                     cur.execute("SELECT id FROM noticias_publicadas WHERE noticia_hash = %s", (entry.link,))
-                    if cur.fetchone():
-                        continue
+                    if cur.fetchone(): continue
                     
-                    # 2. Intentar obtener imagen
-                    imagen = extraer_imagen(entry.link)
+                    img = extraer_imagen(entry.link)
+                    gancho = random.choice(GANCHOS)
                     
-                    # 3. Formatear mensaje
-                    header = f"🚀 <b>{categoria.upper()}</b>"
-                    cuerpo = f"{entry.title}"
-                    footer = f"📍 <a href='{entry.link}'>Leer noticia completa</a>"
-                    caption = f"{header}\n\n🆕 {cuerpo}\n\n{footer}"
+                    # 2. Formatear con HOOK
+                    caption = f"🚀 <b>{categoria.upper()}</b>\n\n🆕 {entry.title}\n\n{gancho}\n📍 <a href='{entry.link}'>Leer noticia completa</a>"
                     
-                    # 4. Enviar a Telegram
                     try:
-                        if imagen:
-                            await bot.send_photo(chat_id=channel_id, photo=imagen, caption=caption, parse_mode='HTML')
+                        # 3. Enviar noticia
+                        if img:
+                            await bot.send_photo(chat_id=channel_id, photo=img, caption=caption, parse_mode='HTML')
                         else:
-                            await bot.send_message(chat_id=channel_id, text=caption, parse_mode='HTML', disable_web_page_preview=False)
+                            await bot.send_message(chat_id=channel_id, text=caption, parse_mode='HTML')
                         
-                        # 5. Registrar en DB tras envío exitoso
-                        cur.execute("INSERT INTO noticias_publicadas (noticia_hash, categoria) VALUES (%s, %s)", (entry.link, categoria))
-                        conn.commit()
-                        print(f"✅ Publicado en {categoria}: {entry.title[:30]}...")
-                    
+                        # 4. Contabilizar y verificar anuncio
+                        conteo = guardar_noticia_y_contar(entry.link, categoria)
+                        print(f"✅ {categoria}: Noticia enviada (Total: {conteo})")
+                        
+                        # Cada 10 noticias publicadas GLOBALMENTE, pone un anuncio en el canal actual
+                        if conteo % 10 == 0:
+                            await publicar_anuncio(channel_id)
+                            
                     except Exception as e:
-                        print(f"❌ Error al enviar mensaje a Telegram ({categoria}): {e}")
-                        
+                        print(f"❌ Error Telegram: {e}")
     except Exception as e:
-        print(f"🔥 Error de conexión a la Base de Datos: {e}")
+        print(f"🔥 Error DB: {e}")
 
 async def main():
-    # Creamos tareas para procesar todos los canales en paralelo
-    tareas = []
-    for cat, info in CANALES_CONFIG.items():
-        tareas.append(procesar_canal(cat, info[0], info[1]))
-    
+    tareas = [procesar_canal(cat, info[0], info[1]) for cat, info in CANALES_CONFIG.items()]
     await asyncio.gather(*tareas)
 
 if __name__ == "__main__":
-    if not TOKEN or not DB_URL:
-        print("❌ CRÍTICO: Faltan variables de entorno esenciales (TOKEN o DB_URL).")
-    else:
-        asyncio.run(main())
+    asyncio.run(main())

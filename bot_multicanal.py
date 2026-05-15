@@ -64,19 +64,23 @@ def extraer_imagen(url):
         return None
 
 def noticia_ya_publicada(url_hash):
+    if not supabase: 
+        return False
     try:
         res = supabase.table("noticias_publicadas").select("id").eq("noticia_hash", url_hash).execute()
         return len(res.data) > 0
     except Exception as e:
-        print(f"⚠️ Error verificando duplicados en Supabase: {e}")
+        print(f"⚠️ Error al verificar existencia de noticia en base de datos: {e}")
         return False
 
 def guardar_noticia_y_contar(url_hash, categoria):
+    if not supabase: 
+        return 0
     try:
-        # Registrar noticia
+        # Registrar noticia procesada
         supabase.table("noticias_publicadas").insert({"noticia_hash": url_hash, "categoria": categoria}).execute()
         
-        # Obtener contador de forma dinámica para evitar desbordamiento de índices
+        # Consultar la tabla de control de forma dinámica
         res_count = supabase.table("contador_publicaciones").select("id, total_enviadas").execute()
         
         if res_count.data:
@@ -84,15 +88,18 @@ def guardar_noticia_y_contar(url_hash, categoria):
             nuevo_total = res_count.data[0]["total_enviadas"] + 1
             supabase.table("contador_publicaciones").update({"total_enviadas": nuevo_total}).eq("id", fila_id).execute()
         else:
+            # Inicialización de contingencia si la tabla de control está vacía
             nuevo_total = 1
             supabase.table("contador_publicaciones").insert({"total_enviadas": nuevo_total}).execute()
             
         return nuevo_total
     except Exception as e:
-        print(f"⚠️ Error actualizando base de datos (noticias/contadores): {e}")
+        print(f"⚠️ Error de persistencia en Supabase (guardar_noticia_y_contar): {e}")
         return 0
 
 async def publicar_anuncio(bot, channel_id):
+    if not supabase: 
+        return
     try:
         res = supabase.table("anuncios_disponibles").select("*").eq("activo", True).execute()
         if res.data:
@@ -103,20 +110,20 @@ async def publicar_anuncio(bot, channel_id):
                 await bot.send_photo(chat_id=channel_id, photo=ad['imagen_url'], caption=txt, parse_mode='HTML')
             else:
                 await bot.send_message(chat_id=channel_id, text=txt, parse_mode='HTML')
-            print(f"💰 Anuncio enviado al canal: {channel_id}")
+            print(f"💰 Anuncio integrado enviado al canal {channel_id}")
     except Exception as e: 
-        print(f"❌ Error al enviar anuncio: {e}")
+        print(f"❌ Error al procesar la inserción de anuncio publicitario: {e}")
 
 async def procesar_canal(bot, categoria, url_rss, channel_id):
     if not channel_id: 
-        print(f"⚠️ Salto de canal: La categoría {categoria} no tiene ID configurado.")
+        print(f"⚠️ Advertencia: Omitiendo categoría '{categoria}' porque su variable de entorno de ID de canal está vacía.")
         return
         
-    print(f"🔄 Leyendo noticias de la categoría: {categoria}...")
+    print(f"🔄 Sincronizando fuente RSS de la categoría: {categoria}...")
     try:
         feed = feedparser.parse(url_rss)
     except Exception as e:
-        print(f"❌ Error parseando RSS de {categoria}: {e}")
+        print(f"❌ Error al parsear el feed RSS de {categoria}: {e}")
         return
     
     for entry in feed.entries[:3]:
@@ -134,23 +141,27 @@ async def procesar_canal(bot, categoria, url_rss, channel_id):
                 await bot.send_message(chat_id=channel_id, text=caption, parse_mode='HTML')
             
             conteo = guardar_noticia_y_contar(entry.link, categoria)
-            print(f"✅ {categoria}: Publicado con éxito. (Total global: {conteo})")
+            print(f"✅ {categoria}: Publicado con éxito. Contador acumulado: {conteo}")
             
             if conteo > 0 and conteo % 10 == 0:
                 await publicar_anuncio(bot, channel_id)
                 
         except Exception as e: 
-            print(f"❌ Error enviando mensaje individual a Telegram ({categoria}): {e}")
+            print(f"❌ Error procesando entrada individual en el canal ({categoria}): {e}")
 
 async def main():
-    print("🚀 Iniciando la ejecución del Bot Multicanal...")
+    if not TOKEN:
+        print("❌ CRÍTICO: No se localizó la variable de entorno TELEGRAM_TOKEN.")
+        return
+        
+    print("🚀 Levantando el servicio asíncrono del Bot Multicanal...")
     
-    # Abrir la sesión de red de Telegram correctamente usando un context manager asíncrono
+    # Inicialización centralizada de la sesión de red del Bot
     async with Bot(token=TOKEN) as bot:
         tareas = [procesar_canal(bot, cat, info[0], info[1]) for cat, info in CANALES_CONFIG.items()]
         await asyncio.gather(*tareas)
         
-    print("🏁 Proceso de envío finalizado.")
+    print("🏁 Flujo de ejecución concurrente completado con éxito.")
 
 if __name__ == "__main__":
     asyncio.run(main())

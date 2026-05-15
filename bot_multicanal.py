@@ -7,42 +7,20 @@ from bs4 import BeautifulSoup
 from telegram import Bot
 from supabase import create_client, Client
 
-# --- CONFIGURACIÓN DE CONEXIÓN (Claves integradas como Fallback) ---
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://vjtqhjykwqutxvrufgpv.supabase.co")
-SUPABASE_KEY = os.getenv(
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqdHFoanlrd3F1dHh2cnVmZ3B2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODUyNDkwMCwiZXhwIjoyMDk0MTAwOTAwfQ.jhxHBIBE2liTHdD8WV2CyYSF9xx9Wxfl8HwJ4sXnhbo"
-)
+# --- CONFIGURACIÓN DE CONEXIÓN ---
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-TOKEN = os.getenv("TELEGRAM_TOKEN", "8846389275:AAHwaZEzo8728Pur6N1RfMKGC7T2xY2bW54")
+TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Diccionario de canales configurado con tus IDs de Telegram correspondientes
 CANALES_CONFIG = {
-    "Deportes": [
-        "https://news.google.com/rss/headlines/section/topic/SPORTS?hl=es-419", 
-        os.getenv("CH_DEPORTES", "-1003992580175")
-    ],
-    "Farándula": [
-        "https://news.google.com/rss/search?q=farandula+ENTERTAINMENT&hl=es-419", 
-        os.getenv("CH_ENTRETENIMIENTO", "-1003994588815")
-    ],
-    "Mundo": [
-        "https://news.google.com/rss/headlines/section/topic/WORLD?hl=es-419", 
-        os.getenv("CH_MUNDO", "-1003880714970")
-    ],
-    "Finanzas": [
-        "https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=es-419", 
-        os.getenv("CH_FINANZAS", "-1003956746586")
-    ],
-    "Fitness": [
-        "https://news.google.com/rss/search?q=fitness+y+salud&hl=es-419", 
-        os.getenv("CH_FITNESS", "-1003957425191")
-    ],
-    "Tecnología": [
-        "https://news.google.com/rss/search?q=tecnologia&hl=es-419", 
-        os.getenv("CH_TECNOLOGIA", "-1003919652847")
-    ]
+    "Deportes": ["https://news.google.com/rss/headlines/section/topic/SPORTS?hl=es-419", os.getenv("CH_DEPORTES")],
+    "Farándula": ["https://news.google.com/rss/search?q=farandula+ENTERTAINMENT&hl=es-419", os.getenv("CH_ENTRETENIMIENTO")],
+    "Mundo": ["https://news.google.com/rss/headlines/section/topic/WORLD?hl=es-419", os.getenv("CH_MUNDO")],
+    "Finanzas": ["https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=es-419", os.getenv("CH_FINANZAS")],
+    "Fitness": ["https://news.google.com/rss/search?q=fitness+y+salud&hl=es-419", os.getenv("CH_FITNESS")],
+    "Tecnología": ["https://news.google.com/rss/search?q=tecnologia&hl=es-419", os.getenv("CH_TECNOLOGIA")]
 }
 
 GANCHOS = [
@@ -60,108 +38,62 @@ def extraer_imagen(url):
         soup = BeautifulSoup(res.text, 'html.parser')
         img = soup.find("meta", property="og:image")
         return img["content"] if img else None
-    except: 
-        return None
+    except: return None
 
 def noticia_ya_publicada(url_hash):
-    if not supabase: 
-        return False
-    try:
-        res = supabase.table("noticias_publicadas").select("id").eq("noticia_hash", url_hash).execute()
-        return len(res.data) > 0
-    except Exception as e:
-        print(f"⚠️ Error al verificar existencia de noticia en base de datos: {e}")
-        return False
+    res = supabase.table("noticias_publicadas").select("id").eq("noticia_hash", url_hash).execute()
+    return len(res.data) > 0
 
 def guardar_noticia_y_contar(url_hash, categoria):
-    if not supabase: 
-        return 0
-    try:
-        # Registrar noticia procesada
-        supabase.table("noticias_publicadas").insert({"noticia_hash": url_hash, "categoria": categoria}).execute()
-        
-        # Consultar la tabla de control de forma dinámica
-        res_count = supabase.table("contador_publicaciones").select("id, total_enviadas").execute()
-        
-        if res_count.data:
-            fila_id = res_count.data[0]["id"]
-            nuevo_total = res_count.data[0]["total_enviadas"] + 1
-            supabase.table("contador_publicaciones").update({"total_enviadas": nuevo_total}).eq("id", fila_id).execute()
-        else:
-            # Inicialización de contingencia si la tabla de control está vacía
-            nuevo_total = 1
-            supabase.table("contador_publicaciones").insert({"total_enviadas": nuevo_total}).execute()
-            
-        return nuevo_total
-    except Exception as e:
-        print(f"⚠️ Error de persistencia en Supabase (guardar_noticia_y_contar): {e}")
-        return 0
+    # Registrar noticia
+    supabase.table("noticias_publicadas").insert({"noticia_hash": url_hash, "categoria": categoria}).execute()
+    # Obtener contador actual
+    res_count = supabase.table("contador_publicaciones").select("total_enviadas").eq("id", 1).execute()
+    nuevo_total = res_count.data[0]["total_enviadas"] + 1
+    # Actualizar contador
+    supabase.table("contador_publicaciones").update({"total_enviadas": nuevo_total}).eq("id", 1).execute()
+    return nuevo_total
 
-async def publicar_anuncio(bot, channel_id):
-    if not supabase: 
-        return
+async def publicar_anuncio(channel_id):
     try:
         res = supabase.table("anuncios_disponibles").select("*").eq("activo", True).execute()
         if res.data:
             ad = random.choice(res.data)
+            bot = Bot(token=TOKEN)
             txt = f"<b>📢 PUBLICIDAD</b>\n\n{ad['texto_anuncio']}\n\n👉 <a href='{ad['link_afiliado']}'>MÁS INFORMACIÓN AQUÍ</a>"
-            
-            if ad.get('imagen_url'):
-                await bot.send_photo(chat_id=channel_id, photo=ad['imagen_url'], caption=txt, parse_mode='HTML')
-            else:
-                await bot.send_message(chat_id=channel_id, text=txt, parse_mode='HTML')
-            print(f"💰 Anuncio integrado enviado al canal {channel_id}")
-    except Exception as e: 
-        print(f"❌ Error al procesar la inserción de anuncio publicitario: {e}")
+            await bot.send_photo(chat_id=channel_id, photo=ad['imagen_url'], caption=txt, parse_mode='HTML')
+            print(f"💰 Anuncio enviado a {channel_id}")
+    except Exception as e: print(f"❌ Error Anuncio: {e}")
 
-async def procesar_canal(bot, categoria, url_rss, channel_id):
-    if not channel_id: 
-        print(f"⚠️ Advertencia: Omitiendo categoría '{categoria}' porque su variable de entorno de ID de canal está vacía.")
-        return
-        
-    print(f"🔄 Sincronizando fuente RSS de la categoría: {categoria}...")
-    try:
-        feed = feedparser.parse(url_rss)
-    except Exception as e:
-        print(f"❌ Error al parsear el feed RSS de {categoria}: {e}")
-        return
+async def procesar_canal(categoria, url_rss, channel_id):
+    if not channel_id: return
+    bot = Bot(token=TOKEN)
+    feed = feedparser.parse(url_rss)
     
     for entry in feed.entries[:3]:
+        if noticia_ya_publicada(entry.link): continue
+        
+        img = extraer_imagen(entry.link)
+        gancho = random.choice(GANCHOS)
+        caption = f"🚀 <b>{categoria.upper()}</b>\n\n🆕 {entry.title}\n\n{gancho}\n📍 <a href='{entry.link}'>Leer noticia completa</a>"
+        
         try:
-            if noticia_ya_publicada(entry.link): 
-                continue
-            
-            img = extraer_imagen(entry.link)
-            gancho = random.choice(GANCHOS)
-            caption = f"🚀 <b>{categoria.upper()}</b>\n\n🆕 {entry.title}\n\n{gancho}\n📍 <a href='{entry.link}'>Leer noticia completa</a>"
-            
             if img:
                 await bot.send_photo(chat_id=channel_id, photo=img, caption=caption, parse_mode='HTML')
             else:
                 await bot.send_message(chat_id=channel_id, text=caption, parse_mode='HTML')
             
             conteo = guardar_noticia_y_contar(entry.link, categoria)
-            print(f"✅ {categoria}: Publicado con éxito. Contador acumulado: {conteo}")
+            print(f"✅ {categoria}: Publicado ({conteo})")
             
-            if conteo > 0 and conteo % 10 == 0:
-                await publicar_anuncio(bot, channel_id)
-                
-        except Exception as e: 
-            print(f"❌ Error procesando entrada individual en el canal ({categoria}): {e}")
+            if conteo % 10 == 0:
+                await publicar_anuncio(channel_id)
+        except Exception as e: print(f"❌ Error Telegram ({categoria}): {e}")
 
 async def main():
-    if not TOKEN:
-        print("❌ CRÍTICO: No se localizó la variable de entorno TELEGRAM_TOKEN.")
-        return
-        
-    print("🚀 Levantando el servicio asíncrono del Bot Multicanal...")
-    
-    # Inicialización centralizada de la sesión de red del Bot
-    async with Bot(token=TOKEN) as bot:
-        tareas = [procesar_canal(bot, cat, info[0], info[1]) for cat, info in CANALES_CONFIG.items()]
-        await asyncio.gather(*tareas)
-        
-    print("🏁 Flujo de ejecución concurrente completado con éxito.")
+    tareas = [procesar_canal(cat, info[0], info[1]) for cat, info in CANALES_CONFIG.items()]
+    await asyncio.gather(*tareas)
 
 if __name__ == "__main__":
     asyncio.run(main())
+

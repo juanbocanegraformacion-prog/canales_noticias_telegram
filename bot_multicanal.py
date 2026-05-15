@@ -1,6 +1,4 @@
-# bot_multicanal.py (CORREGIDO)
 import os
-import sys
 import feedparser
 import requests
 import asyncio
@@ -8,28 +6,16 @@ import random
 from bs4 import BeautifulSoup
 from telegram import Bot
 from supabase import create_client, Client
-print("SUPABASE_URL:", os.getenv("SUPABASE_URL"))
-print("TOKEN:", os.getenv("TELEGRAM_TOKEN")[:5] + "..." if os.getenv("TELEGRAM_TOKEN") else "NO DEFINIDO")
-print("CH_DEPORTES:", os.getenv("CH_DEPORTES"))
-# ------------------------------------------------------------
-# 1. VALIDAR VARIABLES DE ENTORNO CRÍTICAS
-# ------------------------------------------------------------
-def check_env():
-    required = [
-        "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "TELEGRAM_TOKEN",
-        "CH_DEPORTES", "CH_ENTRETENIMIENTO", "CH_MUNDO",
-        "CH_FINANZAS", "CH_FITNESS", "CH_TECNOLOGIA"
-    ]
-    missing = [var for var in required if not os.getenv(var)]
-    if missing:
-        print(f"❌ Faltan variables de entorno: {', '.join(missing)}")
-        sys.exit(1)
 
-check_env()
-
+# --- CONFIGURACIÓN DE CONEXIÓN ---
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    print("❌ CRÍTICO: Falta configurar SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en las variables de entorno.")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
+
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 CANALES_CONFIG = {
@@ -50,131 +36,114 @@ GANCHOS = [
     "Actualización de último minuto: ⏱️"
 ]
 
-# ------------------------------------------------------------
-# 2. FUNCIONES AUXILIARES MEJORADAS
-# ------------------------------------------------------------
 def extraer_imagen(url):
     try:
         res = requests.get(url, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
         img = soup.find("meta", property="og:image")
         return img["content"] if img else None
-    except Exception:
+    except: 
         return None
 
 def noticia_ya_publicada(url_hash):
-    res = supabase.table("noticias_publicadas").select("id").eq("noticia_hash", url_hash).execute()
-    return len(res.data) > 0
+    if not supabase: 
+        return False
+    try:
+        res = supabase.table("noticias_publicadas").select("id").eq("noticia_hash", url_hash).execute()
+        return len(res.data) > 0
+    except Exception as e:
+        print(f"⚠️ Error al verificar existencia de noticia en base de datos: {e}")
+        return False
 
 def guardar_noticia_y_contar(url_hash, categoria):
-    # 1. Insertar noticia (ignorar si ya existe para evitar errores de concurrencia)
-    try:
-        supabase.table("noticias_publicadas")\
-                .upsert({"noticia_hash": url_hash, "categoria": categoria}, on_conflict="noticia_hash")\
-                .execute()
-    except Exception as e:
-        print(f"⚠️ Error al insertar noticia: {e}")
-        # continuamos igual, no debe detener el proceso
-
-    # 2. Incrementar contador atómicamente usando SQL directo (más seguro)
-    try:
-        query = """
-            INSERT INTO contador_publicaciones (id, total_enviadas)
-            VALUES (1, 1)
-            ON CONFLICT (id)
-            DO UPDATE SET total_enviadas = contador_publicaciones.total_enviadas + 1
-            RETURNING total_enviadas;
-        """
-        res = supabase.rpc("", params={})  # no podemos ejecutar SQL crudo con supabase-py,
-        # por lo que usaremos el método .sql() si está disponible, o crearemos una función RPC.
-        # Alternativa: utilizar el endpoint REST con supabase-py
-        # Para simplificar, usaremos una función predefinida (ver instrucción abajo)
-        # Aquí opto por una solución robusta: invocar directamente el API con requests (ya que supabase-py no tiene .sql())
-        # Pero para mantenerlo simple, voy a simular el incremento con un procedimiento almacenado.
-        # Deberás crear la función SQL en Supabase (ver instrucciones después del código).
-    except Exception as e:
-        print(f"⚠️ Error al actualizar contador: {e}")
+    if not supabase: 
         return 0
-    # Implementación alternativa mientras tanto (no atómica pero con manejo de fila faltante):
     try:
-        res_count = supabase.table("contador_publicaciones").select("total_enviadas").eq("id", 1).execute()
+        # Registrar noticia procesada
+        supabase.table("noticias_publicadas").insert({"noticia_hash": url_hash, "categoria": categoria}).execute()
+        
+        # Consultar la tabla de control de forma dinámica
+        res_count = supabase.table("contador_publicaciones").select("id, total_enviadas").execute()
+        
         if res_count.data:
+            fila_id = res_count.data[0]["id"]
             nuevo_total = res_count.data[0]["total_enviadas"] + 1
-            supabase.table("contador_publicaciones").update({"total_enviadas": nuevo_total}).eq("id", 1).execute()
+            supabase.table("contador_publicaciones").update({"total_enviadas": nuevo_total}).eq("id", fila_id).execute()
         else:
-            # Si la fila no existe, la creamos con valor 1
-            supabase.table("contador_publicaciones").insert({"id": 1, "total_enviadas": 1}).execute()
+            # Inicialización de contingencia si la tabla de control está vacía
             nuevo_total = 1
+            supabase.table("contador_publicaciones").insert({"total_enviadas": nuevo_total}).execute()
+            
         return nuevo_total
     except Exception as e:
-        print(f"❌ Error grave en contador: {e}")
-        raise
+        print(f"⚠️ Error de persistencia en Supabase (guardar_noticia_y_contar): {e}")
+        return 0
 
-async def publicar_anuncio(channel_id):
+async def publicar_anuncio(bot, channel_id):
+    if not supabase: 
+        return
     try:
         res = supabase.table("anuncios_disponibles").select("*").eq("activo", True).execute()
         if res.data:
             ad = random.choice(res.data)
-            bot = Bot(token=TOKEN)
             txt = f"<b>📢 PUBLICIDAD</b>\n\n{ad['texto_anuncio']}\n\n👉 <a href='{ad['link_afiliado']}'>MÁS INFORMACIÓN AQUÍ</a>"
+            
             if ad.get('imagen_url'):
                 await bot.send_photo(chat_id=channel_id, photo=ad['imagen_url'], caption=txt, parse_mode='HTML')
             else:
                 await bot.send_message(chat_id=channel_id, text=txt, parse_mode='HTML')
-            print(f"💰 Anuncio enviado a {channel_id}")
-    except Exception as e:
-        print(f"❌ Error Anuncio: {e}")
+            print(f"💰 Anuncio integrado enviado al canal {channel_id}")
+    except Exception as e: 
+        print(f"❌ Error al procesar la inserción de anuncio publicitario: {e}")
 
-# ------------------------------------------------------------
-# 3. PROCESAMIENTO PRINCIPAL (CON MENSAJES DE DEPURACIÓN)
-# ------------------------------------------------------------
-async def procesar_canal(categoria, url_rss, channel_id):
-    if not channel_id:
-        print(f"⚠️ Canal {categoria}: CHANNEL_ID vacío. Omitiendo.")
+async def procesar_canal(bot, categoria, url_rss, channel_id):
+    if not channel_id: 
+        print(f"⚠️ Advertencia: Omitiendo categoría '{categoria}' porque su variable de entorno de ID de canal está vacía.")
         return
-
-    print(f"🔍 [{categoria}] Iniciando scraping...")
-    bot = Bot(token=TOKEN)
+        
+    print(f"🔄 Sincronizando fuente RSS de la categoría: {categoria}...")
     try:
         feed = feedparser.parse(url_rss)
-        entries = feed.entries[:3]
-        print(f"   ↳ {len(entries)} noticias obtenidas del feed.")
     except Exception as e:
-        print(f"❌ [{categoria}] Error al parsear feed: {e}")
+        print(f"❌ Error al parsear el feed RSS de {categoria}: {e}")
         return
-
-    for entry in entries:
-        print(f"   • Evaluando: {entry.title[:40]}...")
-        if noticia_ya_publicada(entry.link):
-            print("     ↳ Ya publicada, omitiendo.")
-            continue
-
-        img = extraer_imagen(entry.link)
-        gancho = random.choice(GANCHOS)
-        caption = f"🚀 <b>{categoria.upper()}</b>\n\n🆕 {entry.title}\n\n{gancho}\n📍 <a href='{entry.link}'>Leer noticia completa</a>"
-
+    
+    for entry in feed.entries[:3]:
         try:
+            if noticia_ya_publicada(entry.link): 
+                continue
+            
+            img = extraer_imagen(entry.link)
+            gancho = random.choice(GANCHOS)
+            caption = f"🚀 <b>{categoria.upper()}</b>\n\n🆕 {entry.title}\n\n{gancho}\n📍 <a href='{entry.link}'>Leer noticia completa</a>"
+            
             if img:
                 await bot.send_photo(chat_id=channel_id, photo=img, caption=caption, parse_mode='HTML')
             else:
-                await bot.send_message(chat_id=channel_id, text=caption, parse_mode='HTML', disable_web_page_preview=False)
-
+                await bot.send_message(chat_id=channel_id, text=caption, parse_mode='HTML')
+            
             conteo = guardar_noticia_y_contar(entry.link, categoria)
-            print(f"✅ [{categoria}] Publicado: {entry.title[:30]} (total: {conteo})")
-
-            if conteo and conteo % 10 == 0:
-                await publicar_anuncio(channel_id)
-        except Exception as e:
-            print(f"❌ [{categoria}] Error al enviar a Telegram: {e}")
+            print(f"✅ {categoria}: Publicado con éxito. Contador acumulado: {conteo}")
+            
+            if conteo > 0 and conteo % 10 == 0:
+                await publicar_anuncio(bot, channel_id)
+                
+        except Exception as e: 
+            print(f"❌ Error procesando entrada individual en el canal ({categoria}): {e}")
 
 async def main():
-    print("🚀 Iniciando bot multicanal...")
-    tareas = [procesar_canal(cat, info[0], info[1]) for cat, info in CANALES_CONFIG.items()]
-    await asyncio.gather(*tareas)
-    print("🏁 Ejecución finalizada.")
+    if not TOKEN:
+        print("❌ CRÍTICO: No se localizó la variable de entorno TELEGRAM_TOKEN.")
+        return
+        
+    print("🚀 Levantando el servicio asíncrono del Bot Multicanal...")
+    
+    # Inicialización centralizada de la sesión de red del Bot
+    async with Bot(token=TOKEN) as bot:
+        tareas = [procesar_canal(bot, cat, info[0], info[1]) for cat, info in CANALES_CONFIG.items()]
+        await asyncio.gather(*tareas)
+        
+    print("🏁 Flujo de ejecución concurrente completado con éxito.")
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        print(f"💥 Error crítico: {e}")
+    asyncio.run(main())

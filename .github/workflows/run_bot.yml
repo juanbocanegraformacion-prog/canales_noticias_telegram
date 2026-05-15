@@ -11,27 +11,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
-    # Mantiene el entorno actualizado en Node 24 sin advertencias de depreciación
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-    
     steps:
+      # Actualizado de @v4 a la versión más reciente compatible nativamente con Node 24
       - name: Checkout del código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
+      # Actualizado de @v5 a la versión nativa para entornos modernos
       - name: Configurar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.3.0
         with:
           python-version: '3.10'
-          cache: 'pip' # Optimiza la velocidad de ejecución guardando el caché de dependencias
+          cache: 'pip'
 
+       Tarifa de instalación de dependencias limpia
       - name: Instalar dependencias
         run: |
           pip install feedparser requests beautifulsoup4 python-telegram-bot supabase
 
       - name: Ejecutar Bot Multicanal
         env:
-          # Carga automática de tus secretos guardados en GitHub
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}

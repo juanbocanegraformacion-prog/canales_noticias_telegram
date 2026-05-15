@@ -3,26 +3,24 @@ name: NewsBot_RPA_Multichannel
 on:
   schedule:
     # Se ejecuta cada hora (minuto 0)
-    - cron: '0 */4 * * *'
+    - cron: '0 * * * *'
   # Habilita la ejecución manual desde la interfaz de GitHub
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      # Optar por Node 24 ahora para evitar las advertencias de deprecación
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      
+    # Se eliminó la sección 'env' global que forzaba Node 24 para limpiar el log
+    
     steps:
       - name: Checkout del código
-        uses: actions/checkout@v4 # Actualizado de v3 a v4
+        uses: actions/checkout@v4
 
       - name: Configurar Python
-        uses: actions/setup-python@v5 # Actualizado de v4 a v5
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip' # Mantiene la instalación de dependencias rápida
+          cache: 'pip' # Mantiene la instalación de dependencias optimizada
 
       - name: Instalar dependencias
         run: |
@@ -30,7 +28,7 @@ jobs:
 
       - name: Ejecutar Bot Multicanal
         env:
-          # Conexión Supabase (Nuevos Secrets)
+          # Conexión Supabase
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           

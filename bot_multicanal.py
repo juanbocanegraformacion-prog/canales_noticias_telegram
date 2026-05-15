@@ -8,7 +8,9 @@ import random
 from bs4 import BeautifulSoup
 from telegram import Bot
 from supabase import create_client, Client
-
+print("SUPABASE_URL:", os.getenv("SUPABASE_URL"))
+print("TOKEN:", os.getenv("TELEGRAM_TOKEN")[:5] + "..." if os.getenv("TELEGRAM_TOKEN") else "NO DEFINIDO")
+print("CH_DEPORTES:", os.getenv("CH_DEPORTES"))
 # ------------------------------------------------------------
 # 1. VALIDAR VARIABLES DE ENTORNO CRÍTICAS
 # ------------------------------------------------------------
